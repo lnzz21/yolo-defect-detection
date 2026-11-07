@@ -1,6 +1,7 @@
 import random
 
 from utils import glo
+from workstation.i18n import bind, tr
 
 glo._init()
 glo.set_value('yoloname', "yolov5 yolov7 yolov8 yolov9 yolov10 yolov11 rtdetr "
@@ -270,9 +271,9 @@ class YOLOSHOWBASE:
             file_path = os.getcwd()
         file, _ = QFileDialog.getOpenFileName(
             self,  # 父窗口对象
-            "Select your Image / Video",  # 标题
+            tr("Select your Image / Video"),  # 标题
             file_path,  # 默认打开路径为当前路径
-            "Image / Video type (*.jpg *.jpeg *.png *.bmp *.dib *.jpe *.jp2 *.mp4)"  # 选择类型过滤项，过滤内容在括号中
+            tr("Image / Video type (*.jpg *.jpeg *.png *.bmp *.dib *.jpe *.jp2 *.mp4)")
         )
         if file:
             self.inputPath = file
@@ -337,7 +338,7 @@ class YOLOSHOWBASE:
             folder_path = os.getcwd()
         FolderPath = QFileDialog.getExistingDirectory(
             self,
-            "Select your Folder",
+            tr("Select your Folder"),
             folder_path  # 起始目录
         )
         if FolderPath:
@@ -480,9 +481,9 @@ class YOLOSHOWBASE:
             self.model_path = os.getcwd()
         file, _ = QFileDialog.getOpenFileName(
             self,  # 父窗口对象
-            "Select your YOLO Model",  # 标题
+            tr("Select your YOLO Model"),  # 标题
             self.model_path,  # 默认打开路径为当前路径
-            "Model File (*.pt)"  # 选择类型过滤项，过滤内容在括号中
+            tr("Model File (*.pt)")
         )
         if file:
             fileptPath = os.path.join(self.pt_Path, os.path.basename(file))
@@ -578,7 +579,7 @@ class YOLOSHOWBASE:
 
     # 在MessageBar显示消息
     def showStatus(self, msg):
-        self.ui.message_bar.setText(msg)
+        bind(self.ui.message_bar, msg)
         if msg == 'Finish Detection':
             self.quitRunningModel()
             self.ui.run_button.setChecked(False)
@@ -855,7 +856,7 @@ class YOLOSHOWBASE:
                     result_str += "\n"
 
             view = AcrylicFlyoutView(
-                title='Detected Target Category Distribution (Percentage)',
+                title=tr('Detected Target Category Distribution (Percentage)'),
                 content=result_str,
                 image=self.current_workpath + r'\config\result.png',
                 isClosable=True
@@ -863,8 +864,8 @@ class YOLOSHOWBASE:
 
         else:
             view = AcrylicFlyoutView(
-                title='Result Statistics',
-                content="No completed target detection results detected, please execute the detection task first!",
+                title=tr('Result Statistics'),
+                content=tr("No completed target detection results detected, please execute the detection task first!"),
                 isClosable=True
             )
 

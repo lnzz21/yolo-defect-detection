@@ -3,11 +3,12 @@ import json
 import os
 from ui.YOLOSHOWUI import Ui_MainWindow
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QFileDialog, QMainWindow
+from PySide6.QtWidgets import QFileDialog, QMainWindow, QMessageBox
 from yoloshow.YOLOThreadPool import YOLOThreadPool
 from PySide6.QtCore import QTimer, Qt
 from PySide6 import QtCore, QtGui
 from yoloshow.YOLOSHOWBASE import YOLOSHOWBASE, MODEL_THREAD_CLASSES
+from workstation.i18n import button, localize_legacy_window, tr
 
 GLOBAL_WINDOW_STATE = True
 WIDTH_LEFT_BOX_STANDARD = 80
@@ -30,6 +31,12 @@ class YOLOSHOW(QMainWindow, YOLOSHOWBASE):
         # --- 加载UI --- #
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
+        self._workstation = None
+        self.workstation_button = button("钢材缺陷工作台", self.ui.topbox)
+        self.workstation_button.setStyleSheet("QPushButton { background: #164b63; color: white; padding: 7px 14px; border-radius: 5px; }")
+        self.ui.topBox.insertWidget(1, self.workstation_button)
+        localize_legacy_window(self)
+        self.workstation_button.clicked.connect(self.open_workstation)
         self.setAttribute(Qt.WA_TranslucentBackground, True)  # 透明背景
         self.setWindowFlags(Qt.FramelessWindowHint)  # 无头窗口
         self.initSiderWidget()
@@ -146,6 +153,25 @@ class YOLOSHOW(QMainWindow, YOLOSHOWBASE):
             self.yolo_threads.set(model_name, MODEL_THREAD_CLASSES[model_name]())
             self.initModel(yoloname=model_name)
 
+    def open_workstation(self):
+        if self._workstation is None:
+            from workstation.window import WorkstationWindow
+
+            try:
+                self._workstation = WorkstationWindow(self, legacy_busy=self.legacy_detection_running)
+            except (OSError, ValueError) as error:
+                QMessageBox.warning(self, tr("无法打开钢材缺陷工作台"), str(error))
+                return
+        self._workstation.show()
+        self._workstation.raise_()
+        self._workstation.activateWindow()
+
+    def legacy_detection_running(self):
+        for window in (self, glo.get_value("yoloshowvs")):
+            if window and any(thread.isRunning() for thread in window.yolo_threads.threads_pool.values()):
+                return True
+        return False
+
 
     # 导出结果
     def saveResult(self):
@@ -161,7 +187,7 @@ class YOLOSHOW(QMainWindow, YOLOSHOWBASE):
         if is_folder:
             self.OutputDir = QFileDialog.getExistingDirectory(
                 self,  # 父窗口对象
-                "Save Results in new Folder",  # 标题
+                tr("Save Results in new Folder"),  # 标题
                 save_path,  # 起始目录
             )
             current_model_name = self.checkCurrentModel()
@@ -169,9 +195,9 @@ class YOLOSHOW(QMainWindow, YOLOSHOWBASE):
         else:
             self.OutputDir, _ = QFileDialog.getSaveFileName(
                 self,  # 父窗口对象
-                "Save Image/Video",  # 标题
+                tr("Save Image/Video"),  # 标题
                 save_path,  # 起始目录
-                "Image/Vide Type (*.jpg *.jpeg *.png *.bmp *.dib  *.jpe  *.jp2 *.mp4)"  # 选择类型过滤项，过滤内容在括号中
+                tr("Image/Vide Type (*.jpg *.jpeg *.png *.bmp *.dib  *.jpe  *.jp2 *.mp4)")
             )
             current_model_name = self.checkCurrentModel()
             self.saveResultProcess(self.OutputDir, current_model_name, folder=False)
@@ -244,6 +270,10 @@ class YOLOSHOW(QMainWindow, YOLOSHOWBASE):
             self.showStatus('Pause Detection')
 
     def runModel(self, runbuttonStatus=None):
+        if self._workstation is not None and self._workstation.busy():
+            self.ui.run_button.setChecked(False)
+            self.showStatus("请先结束钢材缺陷工作台中的任务。")
+            return
         self.ui.save_status_button.setEnabled(False)
         if runbuttonStatus:
             self.ui.run_button.setChecked(True)

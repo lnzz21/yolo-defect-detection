@@ -7,6 +7,7 @@ from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QApplication, QStyleOptionViewItem, QTableWidget, QTableWidgetItem, QWidget, QHBoxLayout
 
 from qfluentwidgets import TableWidget, isDarkTheme, setTheme, Theme, TableView, TableItemDelegate, setCustomStyleSheet
+from workstation.i18n import bind, language, tr
 
 
 class TableViewDelegate(TableItemDelegate):
@@ -30,7 +31,7 @@ class TableViewQWidget(QWidget):
     def __init__(self,infoList=None):
         super().__init__()
         # setTheme(Theme.DARK)
-        self.setWindowTitle("Result Statistics")
+        bind(self, "Result Statistics", setter="setWindowTitle")
         self.hBoxLayout = QHBoxLayout(self)
         self.tableView = TableWidget(self)
 
@@ -55,10 +56,14 @@ class TableViewQWidget(QWidget):
             self.tableView.setItem(i, 0, QTableWidgetItem(str(info_count)))
             info_count += 1
             for j in range(1, len(info) + 1):
-                self.tableView.setItem(i, j, QTableWidgetItem(info[j - 1]))
+                item = QTableWidgetItem(tr(info[j - 1]) if j == 1 else info[j - 1])
+                if j == 1:
+                    item.setData(Qt.ItemDataRole.UserRole, info[0])
+                self.tableView.setItem(i, j, item)
 
         self.tableView.verticalHeader().hide()
-        self.tableView.setHorizontalHeaderLabels(['Index', 'Class', 'Frequency'])
+        self.translate_table()
+        language().changed.connect(self.translate_table)
         self.tableView.resizeColumnsToContents()
         self.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tableView.setSortingEnabled(True)
@@ -67,6 +72,16 @@ class TableViewQWidget(QWidget):
         self.hBoxLayout.setContentsMargins(20, 10, 20, 10)
         self.hBoxLayout.addWidget(self.tableView)
         self.resize(500, 500)
+
+    def translate_table(self):
+        self.tableView.setHorizontalHeaderLabels([tr(name) for name in ('Index', 'Class', 'Frequency')])
+        sorting = self.tableView.isSortingEnabled()
+        self.tableView.setSortingEnabled(False)
+        for row in range(self.tableView.rowCount()):
+            item = self.tableView.item(row, 1)
+            if item is not None:
+                item.setText(tr(item.data(Qt.ItemDataRole.UserRole)))
+        self.tableView.setSortingEnabled(sorting)
 
 
 if __name__ == "__main__":

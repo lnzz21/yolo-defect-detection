@@ -99,6 +99,10 @@ class YOLOSHOWWindow(YOLOSHOW):
             self.animation.start()
 
     def closeEvent(self, event):
+        if self._workstation is not None and self._workstation.busy():
+            self.showStatus("请先结束钢材缺陷工作台中的任务。")
+            event.ignore()
+            return
         if not self.animation_window:
             config_file = 'config/setting.json'
             config = dict()

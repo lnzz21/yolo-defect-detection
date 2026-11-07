@@ -9,12 +9,14 @@ logging.disable(logging.CRITICAL)  # 禁用所有级别的日志
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 from utils import glo
+from workstation.i18n import language
 from yoloshow.Window import YOLOSHOWWindow as yoloshowWindow
 from yoloshow.Window import YOLOSHOWVSWindow as yoloshowVSWindow
 from yoloshow.ChangeWindow import yoloshow2vs, vs2yoloshow
 
 if __name__ == '__main__':
     app = QApplication([])  # 创建应用程序实例
+    language()
     app.setWindowIcon(QIcon('images/yoloshow.ico'))  # 设置应用程序图标
 
     # 为整个应用程序设置样式表，去除所有QFrame的边框
@@ -35,6 +37,8 @@ if __name__ == '__main__':
 
     # 显示yoloshow窗口
     yoloshow_glo.show()
+    if "--workstation" in sys.argv:
+        yoloshow_glo.open_workstation()
 
     # 连接信号和槽，以实现界面之间的切换
     yoloshow_glo.ui.src_vsmode.clicked.connect(yoloshow2vs)  # 从单模式切换到对比模式

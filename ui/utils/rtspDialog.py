@@ -1,6 +1,7 @@
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QFont
 from qfluentwidgets import MessageBoxBase, SubtitleLabel, LineEdit, PushButton, setTheme, Theme, CheckBox
+from workstation.i18n import bind
 
 
 class CustomMessageBox(MessageBoxBase):
@@ -10,10 +11,10 @@ class CustomMessageBox(MessageBoxBase):
         super().__init__(parent)
         self.urlLineEdit = LineEdit(self)
         if mode == "single":
-            self.titleLabel = SubtitleLabel('Input Rtsp/Http/Https URL', self)
+            self.titleLabel = bind(SubtitleLabel(self), 'Input Rtsp/Http/Https URL')
             self.urlLineEdit.setPlaceholderText('rtsp:// - http:// - https://')
         else:
-            self.titleLabel = SubtitleLabel('Input Rtsp URL', self)
+            self.titleLabel = bind(SubtitleLabel(self), 'Input Rtsp URL')
             self.urlLineEdit.setPlaceholderText('rtsp://')
 
         self.urlLineEdit.setFont(QFont("Segoe UI", 14))
@@ -24,20 +25,20 @@ class CustomMessageBox(MessageBoxBase):
         self.viewLayout.addWidget(self.urlLineEdit)
 
         # Add user authentication checkbox
-        self.authCheckBox = CheckBox('Enable User Authentication', self)
+        self.authCheckBox = bind(CheckBox(self), 'Enable User Authentication')
         self.authCheckBox.setFont(QFont("Segoe UI", 12))
         self.authCheckBox.stateChanged.connect(self._toggleAuthFields)
         self.viewLayout.addWidget(self.authCheckBox)
 
         # Add username and password fields (initially hidden)
         self.usernameLineEdit = LineEdit(self)
-        self.usernameLineEdit.setPlaceholderText('Username')
+        bind(self.usernameLineEdit, 'Username', setter='setPlaceholderText')
         self.usernameLineEdit.setFont(QFont("Segoe UI", 14))
         self.usernameLineEdit.setClearButtonEnabled(True)
         self.usernameLineEdit.setVisible(False)
 
         self.passwordLineEdit = LineEdit(self)
-        self.passwordLineEdit.setPlaceholderText('Password')
+        bind(self.passwordLineEdit, 'Password', setter='setPlaceholderText')
         self.passwordLineEdit.setFont(QFont("Segoe UI", 14))
         self.passwordLineEdit.setClearButtonEnabled(True)
         self.passwordLineEdit.setEchoMode(LineEdit.Password)
@@ -48,8 +49,8 @@ class CustomMessageBox(MessageBoxBase):
         self.viewLayout.addWidget(self.passwordLineEdit)
 
         # change the text of button
-        self.yesButton.setText('Confirm')
-        self.cancelButton.setText('Cancel')
+        bind(self.yesButton, 'Confirm')
+        bind(self.cancelButton, 'Cancel')
         self.yesButton.clicked.connect(self.getValues)
 
         self.widget.setMinimumWidth(400)

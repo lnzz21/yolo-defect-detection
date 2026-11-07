@@ -8,6 +8,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
 
+def train_detection(model, common, *, epochs, name, **options):
+    return model.train(**common, epochs=epochs, patience=30, seed=42,
+                       name=name, exist_ok=False, **options)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data", type=Path, default=ROOT / "datasets/NEU-DET-v1/neu_det.yaml")
@@ -37,8 +42,13 @@ def main():
         print(f"GPU: {torch.cuda.get_device_name(0)}")
     print(f"Dataset: {args.data.resolve()}")
     print(f"Classes: {config['names']}")
+    data_root = Path(config.get("path") or args.data.resolve().parent)
     for split in ("train", "val", "test"):
-        image_dir = Path(config["path"]) / config[split]
+        if split == "test" and not config.get(split) and not (args.evaluate and args.split == "test"):
+            continue
+        if not config.get(split):
+            parser.error(f"Dataset does not specify the {split} split.")
+        image_dir = data_root / config[split]
         if not image_dir.is_dir():
             parser.error(f"Dataset directory missing: {image_dir}")
         print(f"{split}: {sum(p.is_file() for p in image_dir.iterdir())} images")
@@ -57,8 +67,7 @@ def main():
         metrics = model.val(**common, split=args.split, name=f"{args.name}_{args.split}")
         print(f"mAP50: {metrics.box.map50:.4f}; mAP50-95: {metrics.box.map:.4f}")
     else:
-        model.train(**common, epochs=args.epochs, patience=30, seed=42,
-                    name=args.name, exist_ok=False)
+        train_detection(model, common, epochs=args.epochs, name=args.name)
         print(f"Best weights: {model.trainer.best}")
         print("For the GUI, copy best.pt to ptfiles/yolo11n_neu_det.pt.")
 

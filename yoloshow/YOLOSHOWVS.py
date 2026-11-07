@@ -8,6 +8,7 @@ from PySide6 import QtCore, QtGui
 from ui.YOLOSHOWUIVS import Ui_MainWindow
 from yoloshow.YOLOSHOWBASE import YOLOSHOWBASE, MODEL_THREAD_CLASSES
 from yoloshow.YOLOThreadPool import YOLOThreadPool
+from workstation.i18n import bind, localize_legacy_window, tr
 
 GLOBAL_WINDOW_STATE = True
 WIDTH_LEFT_BOX_STANDARD = 80
@@ -28,6 +29,7 @@ class YOLOSHOWVS(QMainWindow, YOLOSHOWBASE):
         # --- 加载UI --- #
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
+        localize_legacy_window(self)
         self.setAttribute(Qt.WA_TranslucentBackground, True)  # 透明背景
         self.setWindowFlags(Qt.FramelessWindowHint)  # 无头窗口
         # --- 加载UI --- #
@@ -189,7 +191,7 @@ class YOLOSHOWVS(QMainWindow, YOLOSHOWBASE):
 
     # 在MessageBar显示消息
     def showStatus(self, msg):
-        self.ui.message_bar.setText(msg)
+        bind(self.ui.message_bar, msg)
         if msg == 'Finish Detection':
             self.quitRunningModel()
             self.ui.run_button.setChecked(False)
@@ -225,7 +227,7 @@ class YOLOSHOWVS(QMainWindow, YOLOSHOWBASE):
         if is_folder:
             self.OutputDir = QFileDialog.getExistingDirectory(
                 self,  # 父窗口对象
-                "Save Results in new Folder",  # 标题
+                tr("Save Results in new Folder"),  # 标题
                 save_path,  # 起始目录
             )
             current_model_name = self.checkCurrentModel(mode="left")
@@ -233,9 +235,9 @@ class YOLOSHOWVS(QMainWindow, YOLOSHOWBASE):
         else:
             self.OutputDir, _ = QFileDialog.getSaveFileName(
                 self,  # 父窗口对象
-                "Save Image/Video",  # 标题
+                tr("Save Image/Video"),  # 标题
                 save_path,  # 起始目录
-                "Image/Vide Type (*.jpg *.jpeg *.png *.bmp *.dib  *.jpe  *.jp2 *.mp4)"  # 选择类型过滤项，过滤内容在括号中
+                tr("Image/Vide Type (*.jpg *.jpeg *.png *.bmp *.dib  *.jpe  *.jp2 *.mp4)")
             )
             current_model_name = self.checkCurrentModel(mode="left")
             self.saveResultProcess(self.OutputDir, current_model_name, folder=False)
@@ -388,6 +390,11 @@ class YOLOSHOWVS(QMainWindow, YOLOSHOWBASE):
 
     # 运行模型
     def runModel(self, runbuttonStatus=None):
+        workstation = getattr(glo.get_value("yoloshow"), "_workstation", None)
+        if workstation is not None and workstation.busy():
+            self.ui.run_button.setChecked(False)
+            self.showStatus("请先结束钢材缺陷工作台中的任务。")
+            return
         self.ui.save_status_button.setEnabled(False)
         if runbuttonStatus:
             self.ui.run_button.setChecked(True)
