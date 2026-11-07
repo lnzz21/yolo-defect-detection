@@ -1,151 +1,89 @@
-# YOLOSHOW -  YOLOv5 / YOLOv7 / YOLOv8 / YOLOv9 / YOLOv10 / YOLOv11 / RTDETR / SAM / MobileSAM / FastSAM GUI based on Pyside6
+# YOLO 钢材表面缺陷检测工作台 · Steel Surface Defect Workbench
 
-## Introduction
+[简体中文](#简体中文) · [English](#english) · [安装与启动 / Setup](#setup) · [实验结果 / Results](#results)
 
-***YOLOSHOW*** is a graphical user interface (GUI) application embed with `YOLOv5` `YOLOv7` `YOLOv8` `YOLOv9` `YOLOv10` `YOLOv11`  `RT-DETR` `SAM` `MobileSAM` `FastSAM` algorithm. 
+## 简体中文
 
- <p align="center"> 
-  English &nbsp; | &nbsp; <a href="https://github.com/SwimmingLiu/YOLOSHOW/blob/master/README_cn.md">简体中文</a>
- </p>
+这是一个基于 YOLOSHOW 扩展的本地桌面工作台。它使用 YOLO11n 检测钢材表面缺陷，把相机和视频检测、抓帧标注、数据集版本管理、可视化训练和模型切换放在同一个 PySide6 界面里。右上角可切换简体中文和 English，语言选择会在重启后恢复。
 
-![YOLOSHOW-Screen](assest/YOLOSHOW-screen.png)
+### 工作流程
 
-## Demo Video
+| 模块 | 实现 |
+| --- | --- |
+| 现场检测 | OpenCV 后台线程读取 USB 相机或视频，调用当前启用的模型，预览缺陷框并逐帧保存检测结果、耗时和模型版本。 [检测代码](workstation/inspection_page.py) |
+| 采集与标注 | 抓取原始帧，手动画框或修正模型预标注。人工审核后保存同名 PNG 和 YOLO TXT，确认无缺陷的图片使用空标签。 [标注代码](workstation/annotations.py) |
+| 数据集管理 | 导出已审核样本，校验标签并保存数据快照。选用基础数据集时，新样本进入训练集，原验证和测试划分保留。 [数据快照代码](workstation/dataset.py) |
+| 可视化训练 | 选择数据、初始权重和训练参数。独立进程运行 Ultralytics，界面逐轮显示损失、验证 mAP 和日志。 [训练进程](workstation/train_worker.py) |
+| 训练历史与模型库 | 按任务保留数据版本、参数、指标和权重。用样图试跑候选模型，再手动启用或切回上一版。 [模型库代码](workstation/store.py) |
 
-`YOLOSHOW v1.x` : [YOLOSHOW-YOLOv9/YOLOv8/YOLOv7/YOLOv5/RTDETR GUI](https://www.bilibili.com/video/BV1BC411x7fW)
+例如，发现一帧漏检了划痕，可以抓取原图、补框并审核，导出新版数据集再训练。训练完成后，在模型库用样图试跑，结合固定验证集的结果决定是否启用。
 
-`YOLOSHOW v2.x` : [YOLOSHOWv2.0-YOLOv9/YOLOv8/YOLOv7/YOLOv5/RTDETR GUI](https://www.bilibili.com/video/BV1ZD421E7m3)
+## English
 
-## Todo List
+This desktop workbench extends YOLOSHOW with a YOLO11n workflow for steel surface defect detection. It brings video and camera inspection, frame annotation, dataset versioning, training, and model activation into a PySide6 interface. The language selector switches between English and Simplified Chinese and remembers the selection.
 
-- [x] Add `YOLOv9` `YOLOv10`  `RT-DETR`  `YOLOv11`  `SAM`  `MobileSAM`  `FastSAM` Algorithm
-- [x] Support Instance Segmentation （ `YOLOv5`  `YOLOv8`  `YOLOv11` `SAM`  `MobileSAM`  `FastSAM`）
-- [x] Support Pose Estimation （ `YOLOv8`  `YOLOv11`）
-- [x] Support Oriented Bounding Boxes ( `YOLOv8`  `YOLOv11` )
-- [x] Support Http Protocol in `RTSP` Function ( `Single` Mode )
-- [x] Add Model Comparison Mode（VS Mode）
-- [x] Support Dragging File Input
-- [ ] Tracking & Counting ( `Industrialization` )
+1. **Inspect** a USB camera feed or local video. The workbench overlays detections and records each processed frame with its timing and model version.
+2. **Annotate** a captured raw frame by drawing boxes or correcting model suggestions. Human-reviewed annotations are saved as YOLO labels. Confirmed defect-free frames have empty label files.
+3. **Export** a versioned dataset snapshot. When a base dataset is selected, new samples go into its training split and existing validation and test assignments are preserved.
+4. **Train** with a selected dataset and checkpoint. A separate Python process runs Ultralytics while the GUI displays per-epoch losses, validation mAP, and logs.
+5. **Review and activate** a completed model. Inspect the run history, try the candidate on a sample image, and activate it or roll back to the previous version.
 
-## Functions
+## Setup
 
-### 1. Support Image / Video / Webcam / Folder (Batch) / IPCam Object Detection
+### 安装与启动 · Install and launch
 
-Choose Image / Video / Webcam / Folder (Batch) / IPCam in the menu bar on the left to detect objects.
+在 Windows PowerShell 中运行。以下命令使用 Python 3.9 和 CPU 版 PyTorch。使用 NVIDIA GPU 时，请将 PyTorch 安装命令替换为与本机驱动兼容的 CUDA 版本。
 
-### 2. Change Models / Hyper Parameters dynamically
+Run these commands in Windows PowerShell. They use Python 3.9 and the CPU build of PyTorch. For NVIDIA GPU acceleration, install a CUDA build of PyTorch and torchvision compatible with your driver.
 
-When the program is running to detect targets, you can change models / hyper Parameters
+~~~powershell
+git clone https://github.com/lnzz21/yolo-defect-detection.git
+cd yolo-defect-detection
+py -3.9 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install torch==2.8.0 torchvision==0.23.0 --index-url https://download.pytorch.org/whl/cpu
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe main.py --workstation
+~~~
 
-1. Support changing model in `YOLOv5` / ` YOLOv7` / `YOLOv8` / `YOLOv9` / `YOLOv10` / `YOLOv11` / `RTDETR` / `YOLOv5-seg` / `YOLOv8-seg` `YOLOv11-seg` / `YOLOv8-pose` / `YOLOv11-pose` / `YOLOv8-obb` / `YOLOv11-obb` / `SAM` / `MobileSAM`  / `FastSAM` dynamically
-2. Support changing `IOU` / `Confidence` / `Delay time ` / `line thickness` dynamically
+### 数据与权重 · Data and checkpoints
 
-### 3. Loading Model Automatically
+数据集、模型权重和运行记录存放在本地。首次运行时，准备与你要执行的步骤对应的文件。
 
-Our program will automatically detect  `pt` files including [YOLOv5 Models](https://github.com/ultralytics/yolov5/releases) /  [YOLOv7 Models](https://github.com/WongKinYiu/yolov7/releases/)  /  [YOLOv8 Models](https://github.com/ultralytics/assets/releases/)  / [YOLOv9 Models](https://github.com/WongKinYiu/yolov9/releases/)  / [YOLOv10 Models](https://github.com/THU-MIG/yolov10/releases/) / [YOLOv11 Models](https://github.com/ultralytics/assets/releases/) / [RT-DETR Models](https://github.com/ultralytics/assets/releases/)  / [SAM Models](https://github.com/ultralytics/assets/releases/) / [MobileSAM Models](https://github.com/ultralytics/assets/releases/) / [FastSAM Models](https://github.com/ultralytics/assets/releases/) that were previously added to the `ptfiles` folder.
+Datasets, checkpoints, and run outputs are stored locally. Prepare the files needed for the steps you plan to run.
 
-If you need add the new `pt` file, please click `Import Model` button in `Settings` box to select your `pt` file. Then our program will put it into  `ptfiles` folder.
+- **初始权重 / Training checkpoint** — 将官方 YOLO11n 预训练权重放到 `ptfiles/yolo11n.pt`，也可以在训练页选择本地 YOLO11 检测权重。 Place the official pretrained YOLO11n checkpoint at this path or select a local YOLO11 detection checkpoint in the training tab.
+- **训练数据 / Training data** — 将 NEU-DET 原始图片和 XML 分别放在 `data/IMAGES/` 和 `data/ANNOTATIONS/`，执行下方转换命令。 Place the original images and XML annotations in those directories and run the conversion below.
+- **检测权重 / Inspection checkpoint** — 在模型库启用工作台训练完成的模型。已有六类 NEU-DET 权重也可放到 `ptfiles/yolo11n_neu_det.pt`，重新打开工作台后会出现在模型库。 Activate a completed workbench model, or place an existing six-class NEU-DET checkpoint at this path and reopen the workbench to register it.
 
-**Notice :** 
+~~~powershell
+.\.venv\Scripts\python.exe tools\prepare_neu_det.py
+~~~
 
-1. All `pt` files are named including `yolov5` / `yolov7` / `yolov8` / `yolov9` / `yolov10` / `yolo11` / `rtdetr` / `sam` / `samv2` / `mobilesam` / `fastsam`.  (e.g. `yolov8-test.pt`)
-2. If it is a `pt` file of  segmentation mode, please name it including `yolov5n-seg` / `yolov8s-seg` / `yolo11-seg` .  (e.g. `yolov8n-seg-test.pt`)
-3. If it is a `pt` file of  pose estimation mode, please name it including `yolov8n-pose` / `yolo11n-pose` .  (e.g. `yolov8n-pose-test.pt`)
-4. If it is a `pt` file of  oriented bounding box mode, please name it including `yolov8n-obb` / `yolo11n-obb` .  (e.g. `yolov8n-obb-test.pt`)
+转换后选择 `datasets/NEU-DET-v1/neu_det.yaml` 进行训练。也可以直接选用符合 YOLO 格式的现有数据集。
 
-### 4. Loading Configures
+Select the generated YAML in the training tab. You can also select an existing YOLO-format dataset.
 
-1.  After startup, the program will automatically loading the last configure parameters.
-2.  After closedown, the program will save the changed configure parameters.
+## Results
 
-### 5. Save Results
+### NEU-DET 验证集实验 · Validation results
 
-If you need Save results, please click `Save Mode` before detection. Then you can save your detection results in selected path.
+项目将 1,800 张 NEU-DET 图片划分为 1,440 张训练图、180 张验证图和 180 张测试图。类别顺序为 `crazing`、`inclusion`、`patches`、`pitted_surface`、`rolled-in_scale`、`scratches`。
 
-### 6. Support Object Detection, Instance Segmentation and Pose Estimation 
+The project split contains 1,440 training, 180 validation, and 180 test images. The six class IDs follow the order listed above.
 
-From ***YOLOSHOW v3.0***，our work supports both Object Detection , Instance Segmentation, Pose Estimation and Oriented Bounding Box. Meanwhile, it also supports task switching between different versions，such as switching from `YOLOv5` Object Detection task to `YOLOv8` Instance Segmentation task.
+| 微调范围 / Fine-tuning scope | Precision | Recall | mAP@0.5 | mAP@0.5:0.95 |
+| --- | ---: | ---: | ---: | ---: |
+| 全参数 / Full model | 72.93% | 70.55% | **76.65%** | **44.88%** |
+| 仅检测头 / Detect head only | 70.80% | 42.46% | 49.73% | 22.48% |
+| Neck + Detect | 67.71% | **75.55%** | 75.85% | 44.01% |
 
-### 7. Support Model Comparison among Object Detection,  Instance Segmentation, Pose Estimation and Oriented Bounding Box
+三种方案使用相同的初始权重、数据划分和随机种子，表中指标来自同一验证集。全参数微调在这次对比中取得最高 mAP，Neck + Detect 取得最高召回率。
 
-From ***YOLOSHOW v3.0***，our work supports compare model performance among Object Detection, Instance Segmentation, Pose Estimation and Oriented Bounding Box.
+All three runs used the same initial weights, data split, and random seed. On the shared validation set, full fine-tuning achieved the highest mAP and Neck + Detect achieved the highest recall.
 
-## Preparation
+## 文档与许可 · Documentation and license
 
-### Experimental environment
-
-```Shell
-OS : Windows 11 
-CPU : Intel(R) Core(TM) i7-10750H CPU @2.60GHz 2.59 GHz
-GPU : NVIDIA GeForce GTX 1660Ti 6GB
-```
-
-### 1. Create virtual environment
-
-create a virtual environment equipped with python version 3.9, then activate environment. 
-
-```shell
-conda create -n yoloshow python=3.9
-conda activate yoloshow
-```
-
-### 2. Install Pytorch frame 
-
-```shell
-Windows: pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-Linux: pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-```
-
-Change other pytorch version in  [![Pytorch](https://img.shields.io/badge/PYtorch-test?style=flat&logo=pytorch&logoColor=white&color=orange)](https://pytorch.org/)
-
-### 3. Install dependency package
-
-Switch the path to the location of the program
-
-```shell
-cd {the location of the program}
-```
-
-Install dependency package of program 
-
-```shell
-pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-```
-
-### 4. Add Font
-
-#### Windows User
-
-Copy all font files `*.ttf` in `fonts` folder into `C:\Windows\Fonts`
-
-#### Linux User
-
-```shell
-mkdir -p ~/.local/share/fonts
-sudo cp fonts/Shojumaru-Regular.ttf ~/.local/share/fonts/
-sudo fc-cache -fv
-```
-
-#### MacOS User
-
-The MacBook is so expensive that I cannot afford it, please install `.ttf` by yourself. 😂
-
-### 5. Run Program
-
-```shell
-python main.py
-```
-
-## Frames
-
-[![Python](https://img.shields.io/badge/python-3776ab?style=for-the-badge&logo=python&logoColor=ffd343)](https://www.python.org/)[![Pytorch](https://img.shields.io/badge/PYtorch-test?style=for-the-badge&logo=pytorch&logoColor=white&color=orange)](https://pytorch.org/)[![Static Badge](https://img.shields.io/badge/Pyside6-test?style=for-the-badge&logo=qt&logoColor=white)](https://doc.qt.io/qtforpython-6/PySide6/QtWidgets/index.html)
-
-## Reference
-
-### YOLO Algorithm
-
-[YOLOv5](https://github.com/ultralytics/yolov5)   [YOLOv7](https://github.com/WongKinYiu/yolov7)  [YOLOv8 / YOLOv11 / RT-DETR / SAM / MobileSAM / FastSAM](https://github.com/ultralytics/ultralytics)  [YOLOv9](https://github.com/WongKinYiu/yolov9)  [YOLOv10](https://github.com/THU-MIG/yolov10) 
-
-### YOLO Graphical User Interface
-
-[YOLOSIDE](https://github.com/Jai-wei/YOLOv8-PySide6-GUI)	[PyQt-Fluent-Widgets](https://github.com/zhiyiYo/PyQt-Fluent-Widgets)
+- [工作台操作、输出目录与模型评估 / Workbench guide (中文)](WORKSTATION.md)
+- [NEU-DET 数据转换、命令行训练与评估 / NEU-DET training guide (中文)](TRAINING_cn.md)
+- [检测头对比脚本 / Detect-head experiment](tools/train_head_only.py) · [Neck + Detect 对比脚本 / Neck + Detect experiment](tools/train_neck_detect.py)
+- 本项目基于 YOLOSHOW，采用 AGPL-3.0。 Built on YOLOSHOW and licensed under AGPL-3.0. [YOLOSHOW](https://github.com/SwimmingLiu/YOLOSHOW) · [原版功能说明 / Original feature guide (中文)](README_cn.md) · [LICENSE](LICENSE)
