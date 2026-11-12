@@ -19,23 +19,22 @@ UI_FILE_PATH = "ui/YOLOSHOWUIVS.ui"
 
 # YOLOSHOW窗口类 动态加载UI文件 和 Ui_mainWindow
 class YOLOSHOWVS(QMainWindow, YOLOSHOWBASE):
-    def __init__(self):
+    def __init__(self, *, embedded=False):
         super().__init__()
         self.current_workpath = os.getcwd()
         self.inputPath = None
         self.result_statistic = None
         self.detect_result = None
+        self._workstation = None
 
         # --- 加载UI --- #
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
-        localize_legacy_window(self)
-        self.setAttribute(Qt.WA_TranslucentBackground, True)  # 透明背景
-        self.setWindowFlags(Qt.FramelessWindowHint)  # 无头窗口
-        # --- 加载UI --- #
-
-        # 初始化侧边栏
-        self.initSiderWidget()
+        if not embedded:
+            localize_legacy_window(self)
+            self.setAttribute(Qt.WA_TranslucentBackground, True)
+            self.setWindowFlags(Qt.FramelessWindowHint)
+            self.initSiderWidget()
 
         # --- 最大化 最小化 关闭 --- #
         self.ui.maximizeButton.clicked.connect(self.maxorRestore)
@@ -390,7 +389,7 @@ class YOLOSHOWVS(QMainWindow, YOLOSHOWBASE):
 
     # 运行模型
     def runModel(self, runbuttonStatus=None):
-        workstation = getattr(glo.get_value("yoloshow"), "_workstation", None)
+        workstation = self._workstation or getattr(glo.get_value("yoloshow"), "_workstation", None)
         if workstation is not None and workstation.busy():
             self.ui.run_button.setChecked(False)
             self.showStatus("请先结束钢材缺陷工作台中的任务。")

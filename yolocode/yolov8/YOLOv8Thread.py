@@ -19,6 +19,8 @@ from yolocode.yolov5.utils.general import increment_path
 from yolocode.yolov8.utils.checks import check_imgsz
 from yolocode.yolov8.utils.torch_utils import select_device
 from concurrent.futures import ThreadPoolExecutor
+from workstation.store import write_json
+from yoloshow.inference_report import InferenceReport, count_classes
 
 
 class YOLOv8Thread(QThread):
@@ -34,6 +36,7 @@ class YOLOv8Thread(QThread):
     send_target_num = Signal(int)  # Targets detected
     send_result_picture = Signal(dict)  # Send the result picture
     send_result_table = Signal(list)  # Send the result table
+    send_report = Signal(dict)
 
     def __init__(self):
         super(YOLOv8Thread, self).__init__()
@@ -77,13 +80,56 @@ class YOLOv8Thread(QThread):
         self.classes = None  # 指定检测类别  --class 0, or --class 0 2 3
         self.line_thickness = 3
         self.results_picture = dict()  # 结果图片
-        self.results_table = list()  # 结果表格
         self.file_path = None # 文件路径
+        self.report_id = None
+        self.report = None
         self.callbacks = defaultdict(list, callbacks.default_callbacks)  # add callbacks
         callbacks.add_integration_callbacks(self)
 
     def run(self):
+        if self.report_id is None:
+            self.run_sources()
+            return
 
+        self.report = InferenceReport(self.report_id, self.source, self.new_model_name)
+        self.report_id = None
+        self.res_status = False
+        self.res_path = None
+        output = None
+        error = None
+        try:
+            output = self.reserve_output_directory()
+            self.save_path = output
+            self.run_sources()
+        except Exception as failure:
+            error = str(failure)
+            if isinstance(self.source, str) and "://" in self.source:
+                error = error.replace(self.source, self.report.source)
+        state = "failed" if error is not None else "stopped" if self.stop_dtc else "completed"
+        report = self.report.finish(state, error)
+        self.report = None
+        if output is not None:
+            path = (output / "summary.json").absolute()
+            try:
+                write_json(path, report)
+                report["summary_path"] = str(path)
+            except OSError as failure:
+                report["save_error"] = str(failure)
+        self.res_status = self.res_path is not None
+        self.send_report.emit(report)
+
+    def reserve_output_directory(self):
+        base = Path(self.project) / self.name
+        for _ in range(5):
+            output = increment_path(base)
+            try:
+                output.mkdir(parents=True)
+                return output
+            except FileExistsError:
+                continue
+        raise OSError(f"Could not reserve inference output directory: {base}")
+
+    def run_sources(self):
         if not self.model:
             self.send_msg.emit("Loading model: {}".format(os.path.basename(self.new_model_name)))
             self.setup_model(self.new_model_name)
@@ -100,18 +146,31 @@ class YOLOv8Thread(QThread):
         self.screenshot = source.lower().startswith("screen")
         # 判断输入源是否是文件夹，如果是列表，则是文件夹
         self.is_folder = isinstance(self.source, list)
-        if self.save_res:
+        if self.save_res and self.report is None:
             self.save_path = increment_path(Path(self.project) / self.name, exist_ok=self.exist_ok)  # increment run
             self.save_path.mkdir(parents=True, exist_ok=True)  # make dir
 
         if self.is_folder:
             for index, source in enumerate(self.source):
+                if self.report is not None and self.stop_dtc:
+                    break
                 is_folder_last = True if index + 1 == len(self.source) else False
-                self.setup_source(source)
-                self.detect(is_folder_last=is_folder_last)
+                self.detect_source(source, is_folder_last)
         else:
+            self.detect_source(source)
+
+    def detect_source(self, source, is_folder_last=False):
+        try:
             self.setup_source(source)
-            self.detect()
+            self.detect(is_folder_last=is_folder_last)
+        finally:
+            if self.report is not None:
+                capture = getattr(self.dataset, "cap", None)
+                if capture is not None:
+                    capture.release()
+                for writer in getattr(self, "vid_writer", ()):
+                    if isinstance(writer, cv2.VideoWriter):
+                        writer.release()
 
     @torch.no_grad()
     def detect(self, is_folder_last=False):
@@ -125,17 +184,11 @@ class YOLOv8Thread(QThread):
         start_time = time.time()  # used to calculate the frame rate
         while True:
             if self.stop_dtc:
-                if self.is_folder and not is_folder_last:
+                if self.report is None and self.is_folder and not is_folder_last:
                     break
-                self.send_msg.emit('Stop Detection')
-                # --- 发送图片和表格结果 --- #
-                self.send_result_picture.emit(self.results_picture)  # 发送图片结果
-                for key, value in self.results_picture.items():
-                    self.results_table.append([key, str(value)])
-                self.results_picture = dict()
-                self.send_result_table.emit(self.results_table)  # 发送表格结果
-                self.results_table = list()
-                # --- 发送图片和表格结果 --- #
+                if self.report is None:
+                    self.send_msg.emit('Stop Detection')
+                    self.send_legacy_statistics()
                 # 释放资源
                 self.dataset.running = False  # stop flag for Thread
                 # 判断self.dataset里面是否有threads
@@ -169,7 +222,13 @@ class YOLOv8Thread(QThread):
                     self.send_msg.emit("Detecting URL: {}".format(self.source))
                 else:
                     self.send_msg.emit("Detecting: {}".format(self.source))
-                self.batch = next(datasets)
+                self.batch = next(datasets, None)
+                if self.batch is None:
+                    if self.report is None and (not self.is_folder or is_folder_last):
+                        self.send_legacy_statistics()
+                        self.res_status = True
+                        self.send_msg.emit('Finish Detection')
+                    break
                 path, im0s, s = self.batch
                 self.vid_cap = self.dataset.cap if self.dataset.mode == "video" else None
                 # 原始图片送入 input框
@@ -210,35 +269,15 @@ class YOLOv8Thread(QThread):
                     p, im0 = path[i], None if self.source_type.tensor else im0s[i].copy()
                     self.file_path = p = Path(p)
 
-                    label_str = self.write_results(i, self.results, (p, im, im0))  # labels   /// original :s +=
-
-                    # labels and nums dict
-                    class_nums = 0
-                    target_nums = 0
-                    self.labels_dict = {}
-                    if 'no detections' in label_str:
-                        pass
-                    else:
-                        for each_target in label_str.split(',')[:-1]:
-                            num_labelname = list(each_target.split(' '))
-                            nums = 0
-                            label_name = ""
-                            for each in range(len(num_labelname)):
-                                if num_labelname[each].isdigit() and each != len(num_labelname) - 1:
-                                    nums = num_labelname[each]
-                                elif len(num_labelname[each]):
-                                    label_name += num_labelname[each] + " "
-                            target_nums += int(nums)
-                            class_nums += 1
-                            if label_name in self.labels_dict:
-                                self.labels_dict[label_name] += int(nums)
-                            else:  # 第一次出现的类别
-                                self.labels_dict[label_name] = int(nums)
+                    self.write_results(i, self.results, (p, im, im0))
+                    self.labels_dict = count_classes(self.results[i])
+                    if self.report is not None:
+                        self.report.add(self.report.source if self.webcam else p, self.labels_dict)
 
                     # Send test results
                     self.send_output.emit(self.plotted_img)  # after detection
-                    self.send_class_num.emit(class_nums)
-                    self.send_target_num.emit(target_nums)
+                    self.send_class_num.emit(len(self.labels_dict))
+                    self.send_target_num.emit(sum(self.labels_dict.values()))
                     self.results_picture = self.labels_dict
 
                     if self.save_res:
@@ -248,6 +287,9 @@ class YOLOv8Thread(QThread):
                     if self.speed_thres != 0:
                         time.sleep(self.speed_thres / 1000)  # delay , ms
 
+                if self.report is not None and self.dataset.mode == "video":
+                    continue  # Count frames until the decoder reaches the end of this file.
+
                 if self.is_folder and not is_folder_last:
                     # 判断当前是否为视频
                     if self.file_path and self.file_path.suffix[1:] in VID_FORMATS and percent != self.progress_value:
@@ -255,22 +297,24 @@ class YOLOv8Thread(QThread):
                     break
 
                 if percent == self.progress_value and not self.webcam:
+                    if self.report is not None:
+                        break
                     self.send_progress.emit(0)
-                    self.send_msg.emit('Finish Detection')
-                    # --- 发送图片和表格结果 --- #
-                    self.send_result_picture.emit(self.results_picture)  # 发送图片结果
-                    for key, value in self.results_picture.items():
-                        self.results_table.append([key, str(value)])
-                    self.results_picture = dict()
-                    self.send_result_table.emit(self.results_table)  # 发送表格结果
-                    self.results_table = list()
-                    # --- 发送图片和表格结果 --- #
+                    self.send_legacy_statistics()
                     self.res_status = True
                     if self.vid_cap is not None:
                         self.vid_cap.release()
                     if isinstance(self.vid_writer[-1], cv2.VideoWriter):
                         self.vid_writer[-1].release()  # release final video writer
+                    self.send_msg.emit('Finish Detection')
                     break
+            else:
+                self.msleep(20)
+
+    def send_legacy_statistics(self):
+        self.send_result_picture.emit(self.results_picture)
+        self.send_result_table.emit([[name, str(count)] for name, count in self.results_picture.items()])
+        self.results_picture = {}
 
     def setup_model(self, model, verbose=True):
         """Initialize YOLO model with given parameters and set it to evaluation mode."""
@@ -384,7 +428,8 @@ class YOLOv8Thread(QThread):
         suffix, fourcc = (".mp4", "avc1") if MACOS else (".avi", "WMV2") if WINDOWS else (".avi", "MJPG")
         # Save imgs
         if self.dataset.mode == "image":
-            cv2.imwrite(save_path, im0)
+            if not cv2.imwrite(save_path, im0):
+                raise OSError(f"Could not write prediction image: {save_path}")
             return save_path
 
         else:  # 'video' or 'stream'
@@ -392,16 +437,14 @@ class YOLOv8Thread(QThread):
                 self.vid_path[idx] = save_path
                 if isinstance(self.vid_writer[idx], cv2.VideoWriter):
                     self.vid_writer[idx].release()  # release previous video writer
-                if vid_cap:  # video
-                    fps = int(vid_cap.get(cv2.CAP_PROP_FPS))  # integer required, floats produce error in MP4 codec
-                    w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                    h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                else:  # stream
-                    fps, w, h = 30, im0.shape[1], im0.shape[0]
+                fps = (self.dataset.fps or 30) if vid_cap else 30
+                h, w = im0.shape[:2]
                 # suffix, fourcc = (".mp4", "avc1") if MACOS else (".avi", "WMV2") if WINDOWS else (".avi", "MJPG")
                 self.vid_writer[idx] = cv2.VideoWriter(
                     str(Path(save_path).with_suffix(suffix)), cv2.VideoWriter_fourcc(*fourcc), fps, (w, h)
                 )
+                if not self.vid_writer[idx].isOpened():
+                    raise OSError(f"Could not open prediction video: {save_path}")
             # Write video
             self.vid_writer[idx].write(im0)
             return str(Path(save_path).with_suffix(suffix))

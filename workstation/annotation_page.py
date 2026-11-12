@@ -6,7 +6,7 @@ from uuid import uuid4
 from PySide6.QtCore import QPointF, QRectF, QSignalBlocker, Qt, QThread, Signal
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
-    QComboBox, QFileDialog, QHBoxLayout, QLineEdit, QMessageBox,
+    QComboBox, QFileDialog, QFrame, QHBoxLayout, QLineEdit, QMessageBox,
     QSplitter, QVBoxLayout, QWidget,
 )
 
@@ -50,7 +50,7 @@ class BoxCanvas(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor("#17212c"))
+        painter.fillRect(self.rect(), QColor("#142c36"))
         if self.image is None:
             painter.setPen(QColor("#edf3f9"))
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, tr("抓取原始帧后，在这里拖动画框"))
@@ -137,21 +137,29 @@ class AnnotationPage(QWidget):
         self.prelabel = None
         self.exporter = None
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
         self.media = MediaView()
         self.media.source_selected.connect(self.start_capture)
         self.capture = button("抓帧到标注区")
         self.capture.clicked.connect(self.capture_latest)
         self.group = QLineEdit()
         bind(self.group, "工件或采集批次（可选）", setter="setPlaceholderText")
-        left = QWidget()
+        left = QFrame(objectName="card")
         left_layout = QVBoxLayout(left)
+        source_title = label("采集画面")
+        source_title.setObjectName("cardTitle")
+        left_layout.addWidget(source_title)
         left_layout.addWidget(self.media, 1)
         left_layout.addWidget(self.group)
         left_layout.addWidget(self.capture)
 
-        right = QWidget()
+        right = QFrame(objectName="card")
         self.editor = right
         right_layout = QVBoxLayout(right)
+        editor_title = label("标注审核")
+        editor_title.setObjectName("cardTitle")
+        right_layout.addWidget(editor_title)
         self.items = QComboBox()
         self.items.currentIndexChanged.connect(self.load_selected)
         self.canvas = BoxCanvas()
@@ -165,19 +173,28 @@ class AnnotationPage(QWidget):
         suggest = button("模型预标注")
         suggest.clicked.connect(self.run_prelabel)
         review = button("审核并保存")
+        review.setProperty("primary", True)
         review.clicked.connect(lambda: self.save("reviewed"))
         normal = button("确认无缺陷")
         normal.clicked.connect(lambda: self.save("negative"))
         actions = QHBoxLayout()
-        for widget in (self.classes, delete, suggest, review, normal):
+        for widget in (self.classes, delete, suggest):
             actions.addWidget(widget)
+        review_actions = QHBoxLayout()
+        review_actions.addStretch()
+        review_actions.addWidget(normal)
+        review_actions.addWidget(review)
         right_layout.addWidget(self.items)
         right_layout.addWidget(self.canvas, 1)
         right_layout.addLayout(actions)
+        right_layout.addLayout(review_actions)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(left)
         splitter.addWidget(right)
+        splitter.setChildrenCollapsible(False)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 1)
         layout.addWidget(splitter, 1)
         base_row = QHBoxLayout()
         self.base = QLineEdit()
@@ -188,6 +205,7 @@ class AnnotationPage(QWidget):
         pick_base = button("选择基础 YAML")
         pick_base.clicked.connect(self.pick_base)
         export = button("生成数据集版本")
+        export.setProperty("primary", True)
         export.clicked.connect(self.export_dataset)
         base_row.addWidget(label("基础数据集"))
         base_row.addWidget(self.base, 1)
@@ -196,6 +214,7 @@ class AnnotationPage(QWidget):
         layout.addLayout(base_row)
         self.status = label("拖动新增框，单击选框后可换类别或删除。")
         self.status.setWordWrap(True)
+        self.status.setObjectName("statusText")
         self.media.failed.connect(self.set_status)
         layout.addWidget(self.status)
         self.refresh_items()

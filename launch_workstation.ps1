@@ -5,7 +5,7 @@ if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
 
 Push-Location -LiteralPath $PSScriptRoot
 try {
-    & $python main.py --workstation
+    & $python main.py
     exit $LASTEXITCODE
 } finally {
     Pop-Location

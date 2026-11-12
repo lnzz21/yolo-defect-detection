@@ -17,12 +17,11 @@ import os
 import shutil
 import cv2
 import numpy as np
-from ui.utils.AcrylicFlyout import AcrylicFlyoutView, AcrylicFlyout
+from ui.utils.InferenceResults import InferenceResults
 from ui.utils.TableView import TableViewQWidget
-from ui.utils.drawFigure import PlottingThread
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtWidgets import QFileDialog, QGraphicsDropShadowEffect, QFrame, QPushButton
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, QPoint, QTimer
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, QPoint, QThread, QTimer
 from qfluentwidgets import RoundMenu, MenuAnimationType, Action
 import importlib
 from ui.utils.rtspDialog import CustomMessageBox
@@ -127,8 +126,11 @@ class YOLOSHOWBASE:
         thread.send_fps.connect(lambda x: self.ui.fps_label.setText(str(x)))
         thread.send_class_num.connect(lambda x: self.ui.Class_num.setText(str(x)))
         thread.send_target_num.connect(lambda x: self.ui.Target_num.setText(str(x)))
-        thread.send_result_picture.connect(lambda x: self.setResultStatistic(x))
-        thread.send_result_table.connect(lambda x: self.setTableResult(x))
+        if hasattr(thread, "send_report"):
+            thread.send_report.connect(self.setInferenceReport, Qt.ConnectionType.QueuedConnection)
+        else:
+            thread.send_result_picture.connect(lambda x: self.setResultStatistic(x))
+            thread.send_result_table.connect(lambda x: self.setTableResult(x))
 
     # 阴影效果
     def shadowStyle(self, widget, Color, top_bottom=None):
@@ -302,19 +304,16 @@ class YOLOSHOWBASE:
             cam_num, cams = Camera().get_cam_num()
             if cam_num > 0:
                 popMenu = RoundMenu(parent=self)
-                popMenu.setFixedWidth(self.ui.leftbox_bottom.width())
+                popMenu.setMinimumWidth(self.ui.src_webcam.width())
                 actions = []
 
                 for cam in cams:
                     cam_name = f'Camera_{cam}'
                     actions.append(Action(cam_name))
                     popMenu.addAction(actions[-1])
-                    actions[-1].triggered.connect(lambda: self.actionWebcam(cam))
+                    actions[-1].triggered.connect(lambda checked=False, index=cam: self.actionWebcam(index))
 
-                x = self.ui.webcamBox.mapToGlobal(self.ui.webcamBox.pos()).x()
-                y = self.ui.webcamBox.mapToGlobal(self.ui.webcamBox.pos()).y()
-                y = y - self.ui.webcamBox.frameGeometry().height() * 2
-                pos = QPoint(x, y)
+                pos = self.ui.src_webcam.mapToGlobal(QPoint(0, self.ui.src_webcam.height()))
                 popMenu.exec(pos, aniType=MenuAnimationType.DROP_DOWN)
             else:
                 self.showStatus('No camera found !!!')
@@ -342,12 +341,8 @@ class YOLOSHOWBASE:
             folder_path  # 起始目录
         )
         if FolderPath:
-            FileFormat = [".mp4", ".mkv", ".avi", ".flv", ".jpg", ".png", ".jpeg", ".bmp", ".dib", ".jpe", ".jp2"]
-            Foldername = [(FolderPath + "/" + filename) for filename in os.listdir(FolderPath) for jpgname in FileFormat
-                          if jpgname in filename]
-            # self.yolov5_thread.source = Foldername
-            self.inputPath = Foldername
-            self.showStatus('Loaded Folder：{}'.format(os.path.basename(FolderPath)))
+            if not self.load_folder_source(FolderPath):
+                return
             config['folder_path'] = FolderPath
             config_json = json.dumps(config, ensure_ascii=False, indent=2)
             with open(config_file, 'w', encoding='utf-8') as f:
@@ -439,7 +434,7 @@ class YOLOSHOWBASE:
     def showImg(self, img, label, flag):
         try:
             if flag == "path":
-                img_src = cv2.imdecode(np.fromfile(img, dtype=np.uint8), -1)
+                img_src = cv2.imdecode(np.fromfile(img, dtype=np.uint8), cv2.IMREAD_COLOR)
             else:
                 img_src = img
             ih, iw, _ = img_src.shape
@@ -577,6 +572,44 @@ class YOLOSHOWBASE:
             except Exception as err:
                 loggertool.info(f"Error: {err}")
 
+    def detection_running(self):
+        workers = list(self.yolo_threads.threads_pool.values())
+        workers.extend(getattr(self, name, None) for name in ("thread", "rtspThread"))
+        return any(isinstance(worker, QThread) and worker.isRunning() for worker in workers)
+
+    def load_dropped_source(self, path):
+        if self.detection_running():
+            return
+        if os.path.isdir(path):
+            if not self.load_folder_source(path):
+                return
+            preview_path = self.inputPath[0]
+        else:
+            self.inputPath = path
+            self.showStatus('Loaded File：{}'.format(os.path.basename(path)))
+            preview_path = path
+        glo.set_value("inputPath", self.inputPath)
+        if os.path.splitext(preview_path)[1].lower() in {".mp4", ".mkv", ".avi", ".flv"}:
+            capture = cv2.VideoCapture(preview_path)
+            ok, frame = capture.read()
+            capture.release()
+            if ok:
+                self.showImg(frame, self.ui.main_leftbox, "img")
+        else:
+            self.showImg(preview_path, self.ui.main_leftbox, "path")
+
+    def load_folder_source(self, path):
+        formats = {".mp4", ".mkv", ".avi", ".flv", ".jpg", ".png", ".jpeg", ".bmp", ".dib", ".jpe", ".jp2"}
+        with os.scandir(path) as entries:
+            self.inputPath = sorted(item.path for item in entries
+                                    if item.is_file() and os.path.splitext(item.name)[1].lower() in formats)
+        if not self.inputPath:
+            self.inputPath = None
+            self.showStatus("文件夹中没有可用的图片或视频。")
+            return False
+        self.showStatus('Loaded Folder：{}'.format(os.path.basename(path)))
+        return True
+
     # 在MessageBar显示消息
     def showStatus(self, msg):
         bind(self.ui.message_bar, msg)
@@ -657,6 +690,16 @@ class YOLOSHOWBASE:
         params = {"iou": 0.45, "conf": 0.25, "delay": 10, "line_thickness": 3}
         params = self.loadAndSetParams('config/setting.json', params)
         self.updateParams(params)
+
+    def save_config(self):
+        params = {
+            "iou": self.ui.iou_spinbox.value(),
+            "conf": self.ui.conf_spinbox.value(),
+            "delay": self.ui.speed_spinbox.value(),
+            "line_thickness": self.ui.line_spinbox.value(),
+        }
+        with open("config/setting.json", "w", encoding="utf-8") as file:
+            json.dump(params, file, ensure_ascii=False, indent=2)
 
     # 更新Config超参数
     def updateParams(self, params):
@@ -830,71 +873,44 @@ class YOLOSHOWBASE:
         glo.set_value("yoloname", "yolov5 yolov7 yolov8 yolov9 yolov5-seg yolov8-seg rtdetr yolov8-pose")
         self.reloadModel()
 
-    # 接受统计结果，然后写入json中
     def setResultStatistic(self, value):
-        # 写入 JSON 文件
-        with open('config/result.json', 'w', encoding='utf-8') as file:
-            json.dump(value, file, ensure_ascii=False, indent=4)
-        # --- 获取统计结果 + 绘制柱状图 --- #
         self.result_statistic = value
-        self.plot_thread = PlottingThread(self.result_statistic, self.current_workpath)
-        self.plot_thread.start()
-        # --- 获取统计结果 + 绘制柱状图 --- #
 
-    # 展示柱状图结果
     def showResultStatics(self):
-        self.resutl_statistic = dict()
-        # 读取 JSON 文件
-        with open(self.current_workpath + r'\config\result.json', 'r', encoding='utf-8') as file:
-            self.result_statistic = json.load(file)
-        if self.result_statistic:
-            # 创建新字典，使用中文键
-            result_str = ""
-            for index, (key, value) in enumerate(self.result_statistic.items()):
-                result_str += f"{key}:{value}x \t"
-                if (index + 1) % 4 == 0:
-                    result_str += "\n"
-
-            view = AcrylicFlyoutView(
-                title=tr('Detected Target Category Distribution (Percentage)'),
-                content=result_str,
-                image=self.current_workpath + r'\config\result.png',
-                isClosable=True
-            )
-
+        if self.inference_result is not None:
+            self.open_results(self.inference_result, chart=True)
+        elif self.result_statistic is not None:
+            self.open_results({"counts": self.result_statistic, "total_boxes": sum(self.result_statistic.values())}, chart=True)
         else:
-            view = AcrylicFlyoutView(
-                title=tr('Result Statistics'),
-                content=tr("No completed target detection results detected, please execute the detection task first!"),
-                isClosable=True
-            )
+            self.show_no_results()
 
-        # 修改字体大小
-        view.titleLabel.setStyleSheet("""font-size: 30px; 
-                                            color: black; 
-                                            font-weight: bold; 
-                                            font-family: 'KaiTi';
-                                        """)
-        view.contentLabel.setStyleSheet("""font-size: 25px; 
-                                            color: black; 
-                                            font-family: 'KaiTi';""")
-        # 修改image的大小
-        width = self.ui.rightbox_main.width() // 2.5
-        height = self.ui.rightbox_main.height() // 2.5
-        view.imageLabel.setFixedSize(width, height)
-        # adjust layout (optional)
-        view.widgetLayout.insertSpacing(1, 5)
-        view.widgetLayout.addSpacing(5)
-
-        # show view
-        w = AcrylicFlyout.make(view, self.ui.rightbox_play, self)
-        view.closed.connect(w.close)
-
-    # 获取表格结果的列表
     def setTableResult(self, value):
         self.detect_result = value
 
-    # 展示表格结果
     def showTableResult(self):
-        self.table_result = TableViewQWidget(infoList=self.detect_result)
-        self.table_result.show()
+        if self.inference_result is not None:
+            self.open_results(self.inference_result, chart=False)
+        elif self.detect_result:
+            self.table_result = TableViewQWidget(infoList=self.detect_result)
+            self.table_result.show()
+        else:
+            self.show_no_results()
+
+    def open_results(self, report, chart):
+        if self.result_dialog is not None:
+            self.result_dialog.close()
+        self.result_dialog = InferenceResults(report, chart, self.window())
+        self.result_dialog.finished.connect(self.clear_result_dialog)
+        self.result_dialog.show()
+
+    def clear_result_dialog(self):
+        self.result_dialog = None
+
+    def show_no_results(self):
+        if self.detect_result == []:
+            text = "已处理的图像中未检出目标。"
+        elif self.detection_running() or self.report_run_id is not None:
+            text = "推理进行中，结束后可查看统计。"
+        else:
+            text = "暂无本次推理结果。"
+        self.showStatus(text)

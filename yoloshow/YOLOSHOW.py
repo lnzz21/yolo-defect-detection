@@ -1,6 +1,7 @@
 from utils import glo
 import json
 import os
+from uuid import uuid4
 from ui.YOLOSHOWUI import Ui_MainWindow
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QFileDialog, QMainWindow, QMessageBox
@@ -20,26 +21,30 @@ KEYS_LEFT_BOX_MENU = ['src_menu', 'src_setting', 'src_webcam', 'src_folder', 'sr
 
 # YOLOSHOW窗口类 动态加载UI文件 和 Ui_mainWindow
 class YOLOSHOW(QMainWindow, YOLOSHOWBASE):
-    def __init__(self):
+    def __init__(self, *, embedded=False):
         super().__init__()
         self.current_model = None
         self.current_workpath = os.getcwd()
         self.inputPath = None
         self.result_statistic = None
         self.detect_result = None
+        self.inference_result = None
+        self.report_run_id = None
+        self.result_dialog = None
 
         # --- 加载UI --- #
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self._workstation = None
-        self.workstation_button = button("钢材缺陷工作台", self.ui.topbox)
-        self.workstation_button.setStyleSheet("QPushButton { background: #164b63; color: white; padding: 7px 14px; border-radius: 5px; }")
-        self.ui.topBox.insertWidget(1, self.workstation_button)
-        localize_legacy_window(self)
-        self.workstation_button.clicked.connect(self.open_workstation)
-        self.setAttribute(Qt.WA_TranslucentBackground, True)  # 透明背景
-        self.setWindowFlags(Qt.FramelessWindowHint)  # 无头窗口
-        self.initSiderWidget()
+        if not embedded:
+            self.workstation_button = button("钢材缺陷工作台", self.ui.topbox)
+            self.workstation_button.setStyleSheet("QPushButton { background: #164b63; color: white; padding: 7px 14px; border-radius: 5px; }")
+            self.ui.topBox.insertWidget(1, self.workstation_button)
+            localize_legacy_window(self)
+            self.workstation_button.clicked.connect(self.open_workstation)
+            self.setAttribute(Qt.WA_TranslucentBackground, True)
+            self.setWindowFlags(Qt.FramelessWindowHint)
+            self.initSiderWidget()
         # --- 加载UI --- #
 
         # --- 最大化 最小化 关闭 --- #
@@ -168,7 +173,7 @@ class YOLOSHOW(QMainWindow, YOLOSHOWBASE):
 
     def legacy_detection_running(self):
         for window in (self, glo.get_value("yoloshowvs")):
-            if window and any(thread.isRunning() for thread in window.yolo_threads.threads_pool.values()):
+            if window and window.detection_running():
                 return True
         return False
 
@@ -209,6 +214,8 @@ class YOLOSHOW(QMainWindow, YOLOSHOWBASE):
 
     # 加载 pt 模型到 model_box
     def loadModels(self):
+        if self.report_run_id is not None:
+            return
         pt_list = self.getModelFiles()
 
         if pt_list != self.pt_list:
@@ -260,9 +267,20 @@ class YOLOSHOW(QMainWindow, YOLOSHOWBASE):
 
     def runModelProcess(self, yolo_name):
         yolo_thread = self.yolo_threads.get(yolo_name)
-        yolo_thread.source = self.inputPath
-        yolo_thread.stop_dtc = False
         if self.ui.run_button.isChecked():
+            if not yolo_thread.isRunning():
+                if self.report_run_id is not None:
+                    self.ui.run_button.setChecked(False)
+                    return
+                self.inference_result = self.result_statistic = self.detect_result = None
+                if self.result_dialog is not None:
+                    self.result_dialog.close()
+                yolo_thread.source = self.inputPath.copy() if isinstance(self.inputPath, list) else self.inputPath
+                yolo_thread.stop_dtc = False
+                if hasattr(yolo_thread, "send_report"):
+                    self.report_run_id = yolo_thread.report_id = uuid4().hex
+                    yolo_thread.save_res = self.ui.save_status_button.isChecked()
+                    self.enable_report_inputs(False)
             yolo_thread.is_continue = True
             self.yolo_threads.start_thread(yolo_name)
         else:
@@ -289,11 +307,28 @@ class YOLOSHOW(QMainWindow, YOLOSHOWBASE):
     # 开始/暂停 预测
     def runorContinue(self):
         if self.inputPath is not None:
-            self.changeModel()
+            if self.report_run_id is None:
+                self.changeModel()
             self.runModel()
         else:
             self.showStatus("Please select the Image/Video before starting detection...")
             self.ui.run_button.setChecked(False)
+
+    def enable_report_inputs(self, enabled):
+        for widget in (self.ui.model_box, self.ui.src_img, self.ui.src_folder, self.ui.src_webcam, self.ui.src_camera):
+            widget.setEnabled(enabled)
+
+    def setInferenceReport(self, report):
+        if report["id"] != self.report_run_id:
+            return
+        self.inference_result = report
+        self.report_run_id = None
+        self.enable_report_inputs(True)
+        self.showStatus("Stop Detection" if report["state"] == "stopped" else "Finish Detection")
+        if report["state"] == "failed":
+            bind(self.ui.message_bar, "推理失败：{error}", error=report["error"])
+        if "save_error" in report:
+            bind(self.ui.message_bar, "无法保存统计文件：{error}", error=report["save_error"])
 
     # 停止识别
     def stopDetect(self):

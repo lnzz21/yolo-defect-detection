@@ -7,9 +7,9 @@ from pathlib import Path
 
 from PySide6.QtCharts import QChart, QChartView, QLineSeries, QValueAxis
 from PySide6.QtCore import Qt, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QPainter, QPixmap
+from PySide6.QtGui import QColor, QDesktopServices, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QFileDialog, QGridLayout, QHBoxLayout,
+    QComboBox, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout,
     QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QProgressBar,
     QSpinBox, QSplitter, QTabWidget, QVBoxLayout, QWidget,
 )
@@ -35,7 +35,9 @@ class Curve(QChartView):
         super().__init__(chart)
         bind(chart, title, setter="setTitle")
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self.setMinimumHeight(200)
+        self.setMinimumHeight(166)
+        chart.setBackgroundBrush(QColor("#ffffff"))
+        chart.setBackgroundRoundness(10)
         self.unit = unit
         self.series = {}
         self.x = QValueAxis()
@@ -46,9 +48,11 @@ class Curve(QChartView):
         self.y = QValueAxis()
         chart.addAxis(self.x, Qt.AlignmentFlag.AlignBottom)
         chart.addAxis(self.y, Qt.AlignmentFlag.AlignLeft)
+        colors = iter(("#007c77", "#4d67a0", "#bc6a35"))
         for key, name in keys.items():
             series = QLineSeries()
             bind(series, name, setter="setName")
+            series.setPen(QPen(QColor(next(colors)), 2))
             series.setPointsVisible(True)
             chart.addSeries(series)
             series.attachAxis(self.x)
@@ -82,6 +86,13 @@ class TrainingPage(QWidget):
         self.controller = controller
         self.compute_available = compute_available
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        setup = QFrame(objectName="card")
+        setup_layout = QVBoxLayout(setup)
+        heading = label("训练配置")
+        heading.setObjectName("cardTitle")
+        setup_layout.addWidget(heading)
         form = QGridLayout()
         self.data = QLineEdit()
         bind(self.data, "选择 YOLO 数据集的 YAML 或所在目录", setter="setPlaceholderText")
@@ -103,7 +114,7 @@ class TrainingPage(QWidget):
         form.addWidget(label("初始权重"), 1, 0)
         form.addWidget(self.weights, 1, 1)
         form.addWidget(weights_button, 1, 2)
-        layout.addLayout(form)
+        setup_layout.addLayout(form)
         options = QHBoxLayout()
         self.epochs = self.spin(1, 1000, 100)
         self.batch = self.spin(1, 128, 4)
@@ -116,15 +127,18 @@ class TrainingPage(QWidget):
             options.addWidget(widget)
         options.addStretch()
         self.start_button = button("开始训练")
+        self.start_button.setProperty("primary", True)
         self.start_button.clicked.connect(self.start)
         self.stop_button = button("本轮后停止")
         self.stop_button.setEnabled(False)
         self.stop_button.clicked.connect(self.stop)
         options.addWidget(self.start_button)
         options.addWidget(self.stop_button)
-        layout.addLayout(options)
+        setup_layout.addLayout(options)
+        layout.addWidget(setup)
         self.status = label("请选择数据集。短轮次可用于检查训练链路。")
         self.status.setWordWrap(True)
+        self.status.setObjectName("statusText")
         self.progress = QProgressBar()
         self.progress.setValue(0)
         layout.addWidget(self.status)
@@ -234,7 +248,10 @@ class ModelPage(QWidget):
         self.trial = None
         self.preview_image = None
         layout = QHBoxLayout(self)
-        left = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        history_card = QFrame(objectName="card")
+        left = QVBoxLayout(history_card)
         self.jobs = QComboBox()
         self.jobs.currentIndexChanged.connect(self.show_job)
         self.job_info = QPlainTextEdit()
@@ -243,39 +260,45 @@ class ModelPage(QWidget):
         self.job_map = Curve("历史验证 mAP", MAP_KEYS, unit=True)
         open_folder = button("打开任务目录")
         open_folder.clicked.connect(self.open_job)
-        left.addWidget(label("训练历史"))
+        history_title = label("训练历史")
+        history_title.setObjectName("cardTitle")
+        left.addWidget(history_title)
         left.addWidget(self.jobs)
         left.addWidget(self.job_info, 1)
         left.addWidget(self.job_loss, 2)
         left.addWidget(self.job_map, 2)
         left.addWidget(open_folder)
-        right = QVBoxLayout()
+        model_card = QFrame(objectName="card")
+        right = QVBoxLayout(model_card)
         self.models = QComboBox()
         self.active = QLabel()
         self.active.setWordWrap(True)
         self.preview = label("选择模型，再用一张图试跑。")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview.setMinimumSize(300, 240)
-        self.preview.setStyleSheet("background: #17212c; color: #edf3f9; border-radius: 5px;")
+        self.preview.setObjectName("preview")
         self.status = QLabel()
         self.status.setWordWrap(True)
         self.try_button = button("用样图试跑")
         self.try_button.clicked.connect(self.pick_trial)
         enable = button("启用所选模型")
+        enable.setProperty("primary", True)
         enable.clicked.connect(self.activate)
         rollback = button("切回上一版")
         rollback.clicked.connect(self.rollback)
         actions = QHBoxLayout()
         for action in (self.try_button, enable, rollback):
             actions.addWidget(action)
-        right.addWidget(label("模型库"))
+        model_title = label("模型库")
+        model_title.setObjectName("cardTitle")
+        right.addWidget(model_title)
         right.addWidget(self.models)
         right.addWidget(self.active)
         right.addLayout(actions)
         right.addWidget(self.preview, 1)
         right.addWidget(self.status)
-        layout.addLayout(left, 1)
-        layout.addLayout(right, 1)
+        layout.addWidget(history_card, 1)
+        layout.addWidget(model_card, 1)
         self.refresh()
         language().changed.connect(self.refresh)
 
@@ -402,8 +425,8 @@ class ModelPage(QWidget):
 class WorkstationWindow(QDialog):
     model_changed = Signal()
 
-    def __init__(self, parent=None, store=None, legacy_busy=None):
-        super().__init__(parent)
+    def __init__(self, parent=None, store=None, legacy_busy=None, *, embedded=False):
+        super().__init__(parent, Qt.Widget if embedded else Qt.Dialog)
         bind(self, "YOLOSHOW · 钢材缺陷工作台", setter="setWindowTitle")
         self.resize(1080, 760)
         self.store = store or WorkstationStore()
@@ -424,10 +447,15 @@ class WorkstationWindow(QDialog):
         for page, name in zip((self.inspection, self.annotation, self.training, self.library), self.tab_names):
             self.tabs.addTab(page, tr(name))
         language().changed.connect(self.translate_tabs)
-        self.language_selector = LanguageSelector()
-        self.tabs.setCornerWidget(self.language_selector, Qt.Corner.TopRightCorner)
         self.tabs.currentChanged.connect(self.refresh_page)
         layout = QVBoxLayout(self)
+        if embedded:
+            layout.setContentsMargins(0, 0, 0, 0)
+            self.tabs.tabBar().hide()
+            self.tabs.setObjectName("embeddedTabs")
+        else:
+            self.language_selector = LanguageSelector()
+            self.tabs.setCornerWidget(self.language_selector, Qt.Corner.TopRightCorner)
         layout.addWidget(self.tabs)
 
     def translate_tabs(self):
@@ -451,6 +479,10 @@ class WorkstationWindow(QDialog):
     def capture_for_annotation(self, frame, metadata):
         self.annotation.accept_frame(frame, metadata)
         self.tabs.setCurrentWidget(self.annotation)
+
+    def reject(self):
+        if self.isWindow():
+            super().reject()
 
     def closeEvent(self, event):
         if self.busy():

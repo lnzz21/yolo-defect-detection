@@ -404,7 +404,7 @@ Spacer{
                    </size>
                   </property>
                   <property name="styleSheet">
-                   <string notr="true">image: url(:/leftbox/images/yoloshow.png);
+                   <string notr="true">image: url(:/leftbox/images/steelscope.svg);
 border:2px solid rgba(0,0,0,15%);
 border-radius: 15%;
 </string>

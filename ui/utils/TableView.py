@@ -47,7 +47,7 @@ class TableViewQWidget(QWidget):
 
         self.tableView.setWordWrap(False)
         # 表格行数
-        self.tableView.setRowCount(1000)
+        self.tableView.setRowCount(len(infoList) if infoList else 0)
         self.tableView.setColumnCount(3)
         # 表格列数
         self.Infos = infoList if infoList else list()

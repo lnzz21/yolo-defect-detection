@@ -1,0 +1,139 @@
+QWidget {
+    color: #20343e;
+    font-size: 13px;
+}
+#desktop, QTabWidget#embeddedTabs::pane {
+    background: #edf2f4;
+    border: none;
+}
+#sidebar {
+    background: #102832;
+}
+QLabel#brand {
+    color: #f3fbfa;
+    font-size: 21px;
+    font-weight: 700;
+}
+QLabel#navGroup {
+    color: #a0bbc1;
+    font-size: 12px;
+    padding: 6px 8px;
+}
+QPushButton#navItem {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    color: #e3eef1;
+    min-height: 23px;
+    padding: 7px 10px;
+    text-align: left;
+}
+QPushButton#navItem:hover {
+    background: #1a3944;
+}
+QPushButton#navItem:checked {
+    background: #1b464b;
+    border: 1px solid #367574;
+    color: #b5fff4;
+    font-weight: 600;
+}
+QPushButton#navItem:focus {
+    border-color: #53ded2;
+}
+QLabel#pageTitle {
+    font-size: 27px;
+    font-weight: 700;
+    color: #132b35;
+}
+QLabel#pageDescription, QLabel#statusText {
+    color: #49616b;
+}
+QFrame#card {
+    background: #ffffff;
+    border: 1px solid #d6e0e5;
+    border-radius: 9px;
+}
+QLabel#cardTitle {
+    color: #193440;
+    font-size: 14px;
+    font-weight: 700;
+    padding-bottom: 2px;
+}
+QLabel#preview {
+    background: #142c36;
+    border-radius: 7px;
+    color: #d1e6e9;
+}
+QLabel#activeModel {
+    background: #e5f4f2;
+    border: 1px solid #cae7e2;
+    border-radius: 7px;
+    padding: 9px;
+    color: #175e5a;
+    font-weight: 600;
+}
+QPushButton, QComboBox, QLineEdit, QAbstractSpinBox {
+    background: #ffffff;
+    border: 1px solid #c8d6dc;
+    border-radius: 6px;
+    min-height: 19px;
+    padding: 5px 8px;
+}
+QPushButton:hover, QComboBox:hover {
+    background: #f2f8fa;
+    border-color: #8aaab2;
+}
+QComboBox::drop-down, QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {
+    border: none;
+    width: 22px;
+}
+QComboBox::down-arrow, QAbstractSpinBox::down-arrow {
+    image: url(":/setting /images/newsize/box_down.png");
+    width: 10px;
+    height: 7px;
+}
+QAbstractSpinBox::up-arrow {
+    image: url(":/setting /images/newsize/box_up.png");
+    width: 10px;
+    height: 7px;
+}
+QPushButton:focus, QComboBox:focus, QLineEdit:focus, QAbstractSpinBox:focus {
+    border-color: #007c77;
+}
+QPushButton:pressed {
+    background: #e4eef0;
+}
+QPushButton[primary="true"] {
+    background: #00746e;
+    border-color: #00746e;
+    color: #ffffff;
+    font-weight: 600;
+}
+QPushButton[primary="true"]:hover {
+    background: #005d58;
+    border-color: #005d58;
+}
+QPushButton:disabled, QPushButton[primary="true"]:disabled {
+    background: #e8eef0;
+    border-color: #d6e0e5;
+    color: #647680;
+}
+QPlainTextEdit {
+    background: #ffffff;
+    border: 1px solid #d6e0e5;
+    border-radius: 7px;
+    padding: 5px;
+    selection-background-color: #c5eeea;
+    selection-color: #20343e;
+}
+QProgressBar {
+    background: #e5ecef;
+    border: none;
+    border-radius: 4px;
+    min-height: 15px;
+    text-align: center;
+}
+QProgressBar::chunk {
+    background: #7bd3ca;
+    border-radius: 4px;
+}

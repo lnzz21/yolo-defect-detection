@@ -242,7 +242,7 @@ class Ui_MainWindow(object):
         self.logo.setObjectName(u"logo")
         sizePolicy.setHeightForWidth(self.logo.sizePolicy().hasHeightForWidth())
         self.logo.setSizePolicy(sizePolicy)
-        self.logo.setStyleSheet(u"image: url(:/leftbox/images/yoloshow.png);\n"
+        self.logo.setStyleSheet(u"image: url(:/leftbox/images/steelscope.svg);\n"
 "border:2px solid rgba(0,0,0,15%);\n"
 "border-radius: 15%;\n"
 "\n"

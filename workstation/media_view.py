@@ -21,8 +21,10 @@ class MediaView(QWidget):
         self.worker = None
         self.latest = None
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
         toolbar = QHBoxLayout()
         self.video_button = button("打开视频")
+        self.video_button.setProperty("primary", True)
         self.camera_button = button("打开相机")
         self.camera_index = QSpinBox()
         self.camera_index.setRange(0, 15)
@@ -40,7 +42,7 @@ class MediaView(QWidget):
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         self.preview.setMinimumHeight(210)
-        self.preview.setStyleSheet("background: #17212c; color: #edf3f9; border-radius: 5px;")
+        self.preview.setObjectName("preview")
         layout.addWidget(self.preview, 1)
         self.timer = QTimer(self)
         self.timer.setInterval(33)

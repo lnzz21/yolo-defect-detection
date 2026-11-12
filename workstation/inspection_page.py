@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from PySide6.QtCore import QUrl, Signal
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget
 
 from workstation.i18n import bind, button, label, msg
 from workstation.media_view import MediaView
@@ -47,10 +47,27 @@ class InspectionPage(QWidget):
         self.compute_available = compute_available
         self.session = None
         self.error = None
-        layout = QVBoxLayout(self)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        live = QFrame(objectName="card")
+        live_layout = QVBoxLayout(live)
+        live_title = label("检测画面")
+        live_title.setObjectName("cardTitle")
+        live_layout.addWidget(live_title)
+
+        controls = QFrame(objectName="card")
+        controls.setMinimumWidth(245)
+        controls.setMaximumWidth(300)
+        control_layout = QVBoxLayout(controls)
+        control_title = label("检测设置")
+        control_title.setObjectName("cardTitle")
+        control_layout.addWidget(control_title)
         self.active = QLabel()
-        layout.addWidget(self.active)
-        options = QHBoxLayout()
+        self.active.setObjectName("activeModel")
+        self.active.setWordWrap(True)
+        control_layout.addWidget(self.active)
+        options = QFormLayout()
         self.device = QComboBox()
         self.device.addItem("CPU", "cpu")
         self.device.addItem("GPU 0", "0")
@@ -59,28 +76,28 @@ class InspectionPage(QWidget):
         self.part = QLineEdit()
         bind(self.part, "工件编号（可选）", setter="setPlaceholderText")
         for name, widget in (("设备", self.device), ("置信度", self.confidence), ("NMS IoU", self.iou)):
-            options.addWidget(label(name))
-            options.addWidget(widget)
-        options.addWidget(self.part, 1)
-        layout.addLayout(options)
+            options.addRow(label(name), widget)
+        options.addRow(self.part)
+        control_layout.addLayout(options)
         self.media = MediaView()
         self.media.source_selected.connect(self.start)
         self.media.updated.connect(self.update_result)
         self.media.failed.connect(self.failed)
         self.media.finished.connect(self.finished)
-        layout.addWidget(self.media, 1)
+        live_layout.addWidget(self.media, 1)
         self.status = label("打开摄像头或视频后，使用已启用的模型检测。")
         self.status.setWordWrap(True)
-        layout.addWidget(self.status)
-        bottom = QHBoxLayout()
+        self.status.setObjectName("statusText")
+        live_layout.addWidget(self.status)
         capture = button("送原图到标注页")
         capture.clicked.connect(self.capture)
         logs = button("打开检测记录")
         logs.clicked.connect(self.open_logs)
-        bottom.addWidget(capture)
-        bottom.addWidget(logs)
-        bottom.addStretch()
-        layout.addLayout(bottom)
+        control_layout.addWidget(capture)
+        control_layout.addWidget(logs)
+        control_layout.addStretch()
+        layout.addWidget(live, 1)
+        layout.addWidget(controls)
         self.refresh_model()
 
     @staticmethod
@@ -93,7 +110,7 @@ class InspectionPage(QWidget):
 
     def refresh_model(self):
         model = self.store.active_model()
-        bind(self.active, "当前启用模型  {model}", model=msg(model["name"] if model else "无，请先在模型库启用"))
+        bind(self.active, "当前模型\n{model}", model=msg(model["name"] if model else "无，请先在模型库启用"))
 
     def start(self, source):
         model = self.store.active_model()

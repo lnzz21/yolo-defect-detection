@@ -1,32 +1,66 @@
-# YOLO 钢材表面缺陷检测工作台 · Steel Surface Defect Workbench
+# SteelScope · 钢材表面缺陷检测工作台
 
-[简体中文](#简体中文) · [English](#english) · [安装与启动 / Setup](#setup) · [实验结果 / Results](#results)
+<img src="images/steelscope.svg" alt="SteelScope 标志" width="56">
+
+[简体中文](#简体中文) · [English](#english) · [工作台截图 / Workbench](#workbench) · [安装与启动 / Setup](#setup) · [输出文件 / Outputs](#outputs) · [基线实验 / Results](#results)
 
 ## 简体中文
 
-这是一个基于 YOLOSHOW 扩展的本地桌面工作台。它使用 YOLO11n 检测钢材表面缺陷，把相机和视频检测、抓帧标注、数据集版本管理、可视化训练和模型切换放在同一个 PySide6 界面里。右上角可切换简体中文和 English，语言选择会在重启后恢复。
+SteelScope 是一个面向钢材表面质检的 PySide6 桌面工作台，使用 YOLO11n 检测划痕、夹杂、麻点等六类缺陷。操作员发现漏检时，可以抓取原图补框并审核，将样本加入下一版训练集。训练完成后，可以在模型库试跑候选模型，再手动启用或切回上一版。
 
-### 工作流程
+**工作流程**　现场检测 → 抓帧与标注审核 → 生成数据集版本 → 可视化训练 → 试跑与启用
 
-| 模块 | 实现 |
-| --- | --- |
-| 现场检测 | OpenCV 后台线程读取 USB 相机或视频，调用当前启用的模型，预览缺陷框并逐帧保存检测结果、耗时和模型版本。 [检测代码](workstation/inspection_page.py) |
-| 采集与标注 | 抓取原始帧，手动画框或修正模型预标注。人工审核后保存同名 PNG 和 YOLO TXT，确认无缺陷的图片使用空标签。 [标注代码](workstation/annotations.py) |
-| 数据集管理 | 导出已审核样本，校验标签并保存数据快照。选用基础数据集时，新样本进入训练集，原验证和测试划分保留。 [数据快照代码](workstation/dataset.py) |
-| 可视化训练 | 选择数据、初始权重和训练参数。独立进程运行 Ultralytics，界面逐轮显示损失、验证 mAP 和日志。 [训练进程](workstation/train_worker.py) |
-| 训练历史与模型库 | 按任务保留数据版本、参数、指标和权重。用样图试跑候选模型，再手动启用或切回上一版。 [模型库代码](workstation/store.py) |
+左侧导航还提供单模型检测和双模型对比，右上角可切换简体中文和 English。
 
-例如，发现一帧漏检了划痕，可以抓取原图、补框并审核，导出新版数据集再训练。训练完成后，在模型库用样图试跑，结合固定验证集的结果决定是否启用。
+**技术栈**　Python、PySide6、OpenCV、PyTorch、Ultralytics YOLO11n
 
 ## English
 
-This desktop workbench extends YOLOSHOW with a YOLO11n workflow for steel surface defect detection. It brings video and camera inspection, frame annotation, dataset versioning, training, and model activation into a PySide6 interface. The language selector switches between English and Simplified Chinese and remembers the selection.
+SteelScope is a PySide6 desktop workbench for steel surface defect detection with YOLO11n. It brings camera and video inspection, annotation, dataset versioning, training, and model activation into one window. The sidebar also provides single-model inference and side-by-side comparison. The interface is available in English and Simplified Chinese.
 
 1. **Inspect** a USB camera feed or local video. The workbench overlays detections and records each processed frame with its timing and model version.
 2. **Annotate** a captured raw frame by drawing boxes or correcting model suggestions. Human-reviewed annotations are saved as YOLO labels. Confirmed defect-free frames have empty label files.
 3. **Export** a versioned dataset snapshot. When a base dataset is selected, new samples go into its training split and existing validation and test assignments are preserved.
 4. **Train** with a selected dataset and checkpoint. A separate Python process runs Ultralytics while the GUI displays per-epoch losses, validation mAP, and logs.
 5. **Review and activate** a completed model. Inspect the run history, try the candidate on a sample image, and activate it or roll back to the previous version.
+
+## Workbench
+
+### 现场检测 · Inspection
+
+打开本地视频或 USB 相机后，使用当前启用的模型逐帧检测。界面预览缺陷框，后台记录每帧的预测框、处理耗时和模型版本。右侧可以调整设备、置信度和 NMS IoU。 [检测代码](workstation/inspection_page.py)
+
+![SteelScope 现场检测页，显示视频和相机入口及检测设置](images/Inspection.png)
+
+### 采集与标注 · Capture and annotation
+
+从检测页发送原始帧，或直接在标注页抓帧。可以手动画框，也可以用当前模型预标注后再修改。人工审核后保存原图与同名 YOLO 标签。生成数据集版本时，若选用基础数据集，新样本进入训练集，沿用原来的验证集和测试集。 [标注代码](workstation/annotations.py) · [数据快照](workstation/dataset.py)
+
+![SteelScope 英文标注页，显示采集预览和待审核的缺陷框](images/Capture%20and%20Annotat.png)
+
+### 可视化训练 · Training
+
+选择数据集、初始权重、轮数、批大小和设备后，由独立进程执行训练。截图记录了一次训练进行中的状态，界面同步显示进度、训练损失、验证 mAP 和日志。 [训练进程](workstation/train_worker.py)
+
+![SteelScope 可视化训练页，显示训练进度、损失、验证 mAP 和日志](images/Training.png)
+
+### 训练历史与模型 · History and models
+
+左侧查看任务对应的数据版本、初始权重和训练曲线。右侧模型库支持用样图试跑、启用所选模型和切回上一版。完成训练且生成 `best.pt` 的任务会进入模型库。 [模型库代码](workstation/store.py)
+
+![SteelScope 训练历史与模型页，左侧显示任务和曲线，右侧显示模型库和启用选项](images/History%20and%20Models.png)
+
+### 单模型检测 · Single-model inference
+
+选择一份本地权重，对图片、视频或文件夹做推理。YOLO11 批量任务按文件累计预测框，结果表格和类别统计共用同一份任务报告。勾选「保存推理输出」可以保存带框的图片或视频。 [批量统计](yoloshow/inference_report.py)
+
+![SteelScope 单模型检测页，显示输入选项、模型选择、推理参数和统计入口](images/Single-model%20inferen.png)
+
+### 双模型对比 · Model comparison
+
+在左右两侧选择模型，用相同输入并排检查预测框。可以借此查看新旧模型在同一样本上的漏框、多框和位置偏差。 [双模型对比](yoloshow/YOLOSHOWVS.py)
+
+![SteelScope 双模型对比页，显示两个模型选择框和并排预览区](images/Model%20comparison.png)
 
 ## Setup
 
@@ -42,7 +76,7 @@ cd yolo-defect-detection
 py -3.9 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install torch==2.8.0 torchvision==0.23.0 --index-url https://download.pytorch.org/whl/cpu
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe main.py --workstation
+.\.venv\Scripts\python.exe main.py
 ~~~
 
 ### 数据与权重 · Data and checkpoints
@@ -63,9 +97,18 @@ Datasets, checkpoints, and run outputs are stored locally. Prepare the files nee
 
 Select the generated YAML in the training tab. You can also select an existing YOLO-format dataset.
 
+## Outputs
+
+| 产物 / Output | 位置 / Location |
+| --- | --- |
+| 现场检测会话与逐帧记录 / Inspection logs | `runs/workstation/inspections/` |
+| 采集标注与数据集版本 / Annotations and dataset versions | `runs/workstation/annotations/`、`runs/workstation/datasets/` |
+| 训练参数、日志、曲线与权重 / Training runs | `runs/workstation/jobs/` |
+| YOLO11 单模型任务报告 / Single-model inference report | `runs/detect/exp*/summary.json` |
+
 ## Results
 
-### NEU-DET 验证集实验 · Validation results
+### NEU-DET 基线对比 · Baseline validation
 
 项目将 1,800 张 NEU-DET 图片划分为 1,440 张训练图、180 张验证图和 180 张测试图。类别顺序为 `crazing`、`inclusion`、`patches`、`pitted_surface`、`rolled-in_scale`、`scratches`。
 
@@ -77,13 +120,14 @@ The project split contains 1,440 training, 180 validation, and 180 test images. 
 | 仅检测头 / Detect head only | 70.80% | 42.46% | 49.73% | 22.48% |
 | Neck + Detect | 67.71% | **75.55%** | 75.85% | 44.01% |
 
-三种方案使用相同的初始权重、数据划分和随机种子，表中指标来自同一验证集。全参数微调在这次对比中取得最高 mAP，Neck + Detect 取得最高召回率。
+表中是此前三种微调方案在同一验证集上的对比结果。三种方案使用相同的初始权重、数据划分和随机种子。全参数微调取得最高 mAP，Neck + Detect 取得最高召回率。
 
-All three runs used the same initial weights, data split, and random seed. On the shared validation set, full fine-tuning achieved the highest mAP and Neck + Detect achieved the highest recall.
+This table compares three earlier baseline experiments on the same validation set. The runs used the same initial weights, data split, and random seed. Full fine-tuning achieved the highest mAP, and Neck + Detect achieved the highest recall.
 
 ## 文档与许可 · Documentation and license
 
 - [工作台操作、输出目录与模型评估 / Workbench guide (中文)](WORKSTATION.md)
+- [项目介绍 / Project profile (中文)](PROJECT_PROFILE.md)
 - [NEU-DET 数据转换、命令行训练与评估 / NEU-DET training guide (中文)](TRAINING_cn.md)
 - [检测头对比脚本 / Detect-head experiment](tools/train_head_only.py) · [Neck + Detect 对比脚本 / Neck + Detect experiment](tools/train_neck_detect.py)
 - 本项目基于 YOLOSHOW，采用 AGPL-3.0。 Built on YOLOSHOW and licensed under AGPL-3.0. [YOLOSHOW](https://github.com/SwimmingLiu/YOLOSHOW) · [原版功能说明 / Original feature guide (中文)](README_cn.md) · [LICENSE](LICENSE)
